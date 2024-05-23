@@ -163,7 +163,7 @@ Now that our API is up and running. Open a new terminal window and navigate back
 python test.py --local
 ```
 
-Our setup has now evloved and looks like this:
+Our setup has now evolved and looks like this:
 ![step_2](img/step_2.png)
 
 ## Containerizing The Model

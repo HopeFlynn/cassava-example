@@ -10,7 +10,7 @@ class CassavaModel(MLModel):
   # Load the model into memory
   async def load(self) -> bool:
     tf.config.experimental.set_visible_devices([], 'GPU')
-    model_path = '.'
+    model_path = './model'
     self._model = hub.KerasLayer(model_path)
     self.ready = True
     return self.ready

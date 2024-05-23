@@ -28,7 +28,7 @@ def plot(examples, class_names, predictions=None):
 
   for i, (image, label, prediction) in enumerate(zip(images, labels, predictions)):
     # Render the image
-    ax = fig.add_subplot(x, y, i+1)
+    ax = fig.add_subplot(int(x), int(y), i+1)
     ax.imshow(image, aspect='auto')
     ax.grid(False)
     ax.set_xticks([])

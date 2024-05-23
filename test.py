@@ -24,7 +24,7 @@ else:
 batch_size = 16
 
 # Load the dataset and class names
-print("Lodaing dataset...")
+print("Loading dataset...")
 dataset, info = tfds.load('cassava', with_info=True)
 class_names = info.features['label'].names + ['unknown']
 
