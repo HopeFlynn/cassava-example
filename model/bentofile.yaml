@@ -1,0 +1,10 @@
+service: 'service:CassavaModel'
+labels:
+  owner: dsa-team
+include:
+  - '*.py'
+  - '*.pb'
+python:
+  packages:
+    - tensorflow
+    - tensorflow-hub

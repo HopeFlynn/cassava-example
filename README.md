@@ -1,21 +1,15 @@
 # Deploying a Custom Tensorflow Model with MLServer and Seldon Core
 
+This demo is a shorter and slightly modified version of the tutorial created by Ed Shee, found [here](https://github.com/SeldonIO/cassava-example).
+
 ## Background
 
 ### Intro
 
-This tutorial walks through the steps required to take a python ML model from your machine to a production deployment on Kubernetes. More specifically we'll cover:
+This tutorial walks through the steps required to take a python ML model from your machine to a production deployment. More specifically we'll cover:
 - Running the model locally
 - Turning the ML model into an API
 - Containerizing the model
-- Storing the container in a registry
-- Deploying the model to Kubernetes (with Seldon Core)
-- Scaling the model
-
-The tutorial comes with an accompanying video which you might find useful as you work through the steps:
-[![video_play_icon](img/video_play.png)](https://youtu.be/3bR25_qpokM)
-
-The slides used in the video can be found [here](img/slides.pdf).
 
 ### The Use Case
 
@@ -33,7 +27,16 @@ The easiest way to run this example is to clone the repository. Once you've done
 pip install -r requirements.txt
 ```
 
-And it'll set you up with all the libraries required to run the code.
+And it'll set you up with all the libraries required to run the code. The essential libraries are:
+
+```
+bentoml
+numpy
+matplotlib
+tensorflow>2.0.0
+tensorflow-hub
+tensorflow-datasets
+```
 
 ## Running The Python App
 
@@ -88,34 +91,30 @@ Here's what our setup currently looks like:
 
 The problem with running our code like we did earlier is that it's not accessible to anyone who doesn't have the python script (and all of it's dependencies). A good way to solve this is to turn our model into an API. 
 
-Typically people turn to popular python web servers like [Flask](https://github.com/pallets/flask) or [FastAPI](https://github.com/tiangolo/fastapi). This is a good approach and gives us lots of flexibility but it also requires us to do a lot of the work ourselves. We need to impelement routes, set up logging, capture metrics and define an API schema among other things. A simpler way to tackle this problem is to use an inference server. For this tutorial we're going to use the open source [MLServer](https://github.com/SeldonIO/MLServer) framework. 
-
-MLServer supports a bunch of [inference runtimes](https://mlserver.readthedocs.io/en/stable/runtimes/index.html) out of the box, but it also supports [custom python code](https://mlserver.readthedocs.io/en/stable/user-guide/custom.html) which is what we'll use for our Tensorflow model.
+Typically people turn to popular python web servers like [Flask](https://github.com/pallets/flask) or [FastAPI](https://github.com/tiangolo/fastapi). This is a good approach and gives us lots of flexibility but it also requires us to do a lot of the work ourselves. We need to impelement routes, set up logging, capture metrics and define an API schema among other things. A simpler way to tackle this problem is to use an inference server. For this tutorial we're going to use the open source [BentoML](https://github.com/bentoml/BentoML) framework.
 
 ### Setting Things Up
 
-In order to get our model ready to run on MLServer we need to wrap it in a single python class with two methods, `load()` and `predict()`. Let's take a look at the code (found in `model/serve-model.py`):
+In order to get our model ready to run on BentoML we need to wrap it in a single class that represents a service around our model.BentoML uses decoractors to signify service class (`@bentoml.service`) and its functions (`@bentoml.api`). Let's take a look at the code (found in `model/service.py`):
 
 ```Python
-from mlserver import MLModel
-from mlserver.codecs import decode_args
 import numpy as np
 import tensorflow as tf
 import tensorflow_hub as hub
+import bentoml
 
-# Define a class for our Model, inheriting the MLModel class from MLServer
-class CassavaModel(MLModel):
+# Define a service around our Model
+@bentoml.service
+class CassavaModel:
 
-  # Load the model into memory
-  async def load(self) -> bool:
+  def __init__(self) -> None:
+    # Load the model into memory
     tf.config.experimental.set_visible_devices([], 'GPU')
-    model_path = '.'
+    model_path = './model'
     self._model = hub.KerasLayer(model_path)
-    self.ready = True
-    return self.ready
 
   # Logic for making predictions against our model
-  @decode_args
+  @bentoml.api
   async def predict(self, payload: np.ndarray) -> np.ndarray:
     # convert payload to tf.tensor
     payload_tensor = tf.constant(payload)
@@ -130,37 +129,26 @@ class CassavaModel(MLModel):
     return response_data
 ```
 
-The `load()` method is used to define any logic required to set up our model for inference. In our case, we're loading the model weights into `self._model`. The `predict()` method is where we include all of our prediction logic. 
+The `__init__()` method is used to define any logic required to set up our model for inference. In our case, we're loading the model weights into `self._model`. The `predict()` method is where we include all of our prediction logic.  
 
-You may notice that we've slightly modified our code from earlier (in `app.py`). The biggest change is that it is now wrapped in a single class `CassavaModel`.
-
-The only other task we need to do to run our model on MLServer is to specify a `model-settings.json` file:
-
-```Json
-{
-    "name": "cassava",
-    "implementation": "serve-model.CassavaModel"
-}
-```
-
-This is a simple configuration file that tells MLServer how to handle our model. In our case, we've provided a name for our model and told MLServer where to look for our model class (`serve-model.CassavaModel`).
+You may notice that we've slightly modified our code from earlier (in `app.py`). The biggest change is that it is now wrapped in a single class `CassavaModel`, which now represents a service with a single function: `predict`.
 
 ### Serving The Model
 
 We're now ready to serve our model with MLServer. To do that we can simply run:
 
 ```bash
-mlserver start model/
+bentoml serve model.service:CassavaModel
 ```
 
-MLServer will now start up, load our cassava model and provide access through both a REST and gRPC API.
+BentoML will now start an HTTP server, load our CassavaModel service and provide access through a REST API.
 
 ### Making Predictions Using The API
 
 Now that our API is up and running. Open a new terminal window and navigate back to the root of this repository. We can then send predictions to our api using the `test.py` file by running:
 
 ```bash
-python test.py --local
+python test.py
 ```
 
 Our setup has now evolved and looks like this:
@@ -170,34 +158,34 @@ Our setup has now evolved and looks like this:
 
 [Containers](https://en.wikipedia.org/wiki/Containerization_(computing)) are an easy way to package our application together with it's runtime and dependencies. More importantly, containerizing our model allows it to run in a variety of different environments. 
 
-> **Note:** you will need [Docker](https://www.docker.com/) installed to run this section of the tutorial. You'll also need a [docker hub](https://hub.docker.com/) account or another container registry.
+> **Note:** you will need [Docker](https://www.docker.com/) installed to run this section of the tutorial.
 
-Taking our model and packaging it into a container manually can be a pretty tricky process and requires knowledge of writing Dockerfiles. Thankfully MLServer removes this complexity and provides us with a simple `build` command.
+Taking our model and packaging it into a container manually can be a pretty tricky process and requires knowledge of writing Dockerfiles. Thankfully BentoML, just as many other similar tools, removes this complexity and provides us with a simple `build` command.
 
-Before we run this command, we need to provide our dependencies in either a `requirements.txt` or a `conda.env` file. The requirements file we'll use for this example is stored in `model/requirements.txt`:
+Before we run this command, we need to provide our dependencies in a `requirements.txt` file. The requirements file we'll use for this example is stored in `model/requirements.txt`:
 
 ```
-tensorflow==2.12.0
-tensorflow-hub==0.13.0
+tensorflow==2.16.1
+tensorflow-hub==0.16.1
 ```
 
-> Notice that we didn't need to include `mlserver` in our requirements? That's because the builder image has mlserver included already.
+> Notice that we didn't need to include `bentoml` in our requirements? This will be added automatically.
+
+We also need to provide a configuration file to let BentoML know what we are building. Have a look at the [bentofile.yaml](model/bentofile.yaml).
 
 We're now ready to build our container image using:
 
 ```bash
-mlserver build model/ -t [YOUR_CONTAINER_REGISTRY]/[IMAGE_NAME]
+bentoml build --containerize
 ```
 
-Make sure you replace `YOUR_CONTAINER_REGISTRY` and `IMAGE_NAME` with your dockerhub username and a suitable name e.g. "bobsmith/cassava".
-
-MLServer will now build the model into a container image for us. We can check the output of this by running:
+BentoML will now build the model into a container image for us. The `--containerize` tells it to prepare an actual Docker image. We can check the output of this by running:
 
 ```bash
 docker images
 ```
 
-Finally, we want to send this container image to be stored in our container registry. We can do this by running:
+If you have an access to a container registry, e.g. an account at Docker Hub, you can consider pushing this image there
 
 ```bash
 docker push [YOUR_CONTAINER_REGISTRY]/[IMAGE_NAME]
@@ -206,97 +194,10 @@ docker push [YOUR_CONTAINER_REGISTRY]/[IMAGE_NAME]
 Our setup now looks like this. Where our model has been packaged and sent to a container registry:
 ![step_3](img/step_3.png)
 
-## Deploying to Kubernetes
+## Deploying your model
 
-Now that we've turned our model into a production-ready API, containerized it and pushed it to a registry, it's time to deploy our model.
+Having a Docker container with an API running your model is already a powerful setup that shall unlock many use cases. This is where current demo ends. However there are more steps that can be taken from here.
 
-We're going to use a popular open source framework called [Seldon Core](https://github.com/seldonio/seldon-core) to deploy our model. Seldon Core is great because it combines all of the awesome cloud-native features we get from [Kubernetes](https://kubernetes.io/) but it also adds machine-learning specific features.
+Docker containers are often deployed to a container orchestration clusters, using systems such as Kubernetes or Nomad. These systems automate management of containers: starting and stopping them, scaling up or down depending on the incoming traffic, monitoring their state, all in cloud native and provider independent fashion. The eventual setup of a model inside a Docker container running on a Kubernetes cluster looks something like that: ![step_5](img/step_5.png)
 
-*This tutorial assumes you already have a Seldon Core cluster up and running. If that's not the case, head over the [installation instructions](https://docs.seldon.io/projects/seldon-core/en/latest/nav/installation.html) and get set up first. You'll also need to install the `kubectl` command line interface.*
-
-### Creating the Deployment
-
-To create our deployment with Seldon Core we need to create a small configuration file that looks like this:
-
-*You can find this file named `deployment.yaml` in the base folder of this tutorial's repository.*
-
-```yaml
-apiVersion: machinelearning.seldon.io/v1
-kind: SeldonDeployment
-metadata:
-  name: cassava
-spec:
-  protocol: v2
-  predictors:
-    - componentSpecs:
-        - spec:
-            containers:
-              - image: YOUR_CONTAINER_REGISTRY/IMAGE_NAME
-                name: cassava
-                imagePullPolicy: Always
-      graph:
-        name: cassava
-        type: MODEL
-      name: cassava
-```
-
-Make sure you replace `YOUR_CONTAINER_REGISTRY` and `IMAGE_NAME` with your dockerhub username and a suitable name e.g. "bobsmith/cassava".
-
-We can apply this configuration file to our Kubernetes cluster just like we would for any other Kubernetes object using:
-
-```bash
-kubectl create -f deployment.yaml
-```
-
-To check our deployment is up and running we can run:
-
-```bash
-kubectl get pods
-```
-
-We should see `STATUS = Running` once our deployment has finalized.
-
-### Testing the Deployment
-
-Now that our model is up and running on a Kubernetes cluster (via Seldon Core), we can send some test inference requests to make sure it's working.
-
-To do this, we simply run the `test.py` file in the following way:
-
-```bash
-python test.py --remote
-```
-
-This script will randomly select some test samples, send them to the cluster, gather the predictions and then plot them for us.
-
-**A note on running this yourself:**
-*This example is set up to connect to a kubernetes cluster running locally on your machine. If yours is local too, you'll need to make sure you [port forward](https://docs.seldon.io/projects/seldon-core/en/latest/install/kind.html#local-port-forwarding) before sending requests. If your cluster is remote, you'll need to change the `inference_url` variable on line 21 of `test.py`.*
-
-Having deployed our model to kubernetes and tested it, our setup now looks like this:
-![step_4](img/step_4.png)
-
-## Scaling the Model
-
-Our model is now running in a production environment and able to handle requests from external sources. This is awesome but what happens as the number of requests being sent to our model starts to increase? Eventually, we'll reach the limit of what a single server can handle. Thankfully, we can get around this problem by scaling our model [horizontally](https://en.wikipedia.org/wiki/Scalability#Horizontal_or_scale_out).
-
-Kubernetes and Seldon Core make this really easy to do by simply running:
-
-```bash
-kubectl scale sdep cassava --replicas=3
-```
-
-We can replace the `--replicas=3` with any number we want to scale to. 
-
-To watch the servers scaling out we can run:
-
-```bash
-kubectl get pods --watch
-```
-
-Once the new replicas have finished rolling out, our setup now looks like this:
-![step_5](img/step_5.png)
-
-
-In this tutorial we've scaled the model out manually to show how it works. In a real environment we'd want to set up [auto-scaling](https://docs.seldon.io/projects/seldon-core/en/latest/graph/scaling.html#autoscaling-seldon-deployments) to make sure our prediction API is always online and performing as expected.
-
-
-
+If you are interested in these advanced topics, please refer to the [original tutorial](https://github.com/SeldonIO/cassava-example).
