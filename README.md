@@ -1,4 +1,4 @@
-# Deploying a Custom Tensorflow Model with MLServer and Seldon Core
+# Deploying a Custom Tensorflow Model with BentoML and Docker
 
 This demo is a shorter and slightly modified version of the tutorial created by Ed Shee, found [here](https://github.com/SeldonIO/cassava-example).
 
@@ -135,7 +135,7 @@ You may notice that we've slightly modified our code from earlier (in `app.py`).
 
 ### Serving The Model
 
-We're now ready to serve our model with MLServer. To do that we can simply run:
+We're now ready to serve our model with BentoML. To do that we can simply run:
 
 ```bash
 bentoml serve model.service:CassavaModel
