@@ -13,7 +13,7 @@ This tutorial walks through the steps required to take a python ML model from yo
 
 ### The Use Case
 
-For this tutorial, we're going to use the [Cassava dataset](https://www.tensorflow.org/datasets/catalog/cassava) available from the Tensorflow Catalog. This dataset includes leaf images from the cassava plant. Each plant can be classified as either "healthly" or as having one of four diseases (Mosaic Disease, Bacterial Blight, Green Mite, Brown Streak Disease).
+For this tutorial, we're going to use the [Cassava dataset](https://www.tensorflow.org/datasets/catalog/cassava) available from the Tensorflow Catalog. This dataset includes leaf images from the cassava plant. Each plant can be classified as either "healthy" or as having one of four diseases (Mosaic Disease, Bacterial Blight, Green Mite, Brown Streak Disease).
 
 ![cassava_examples](img/cassava_examples.png)
 
@@ -173,16 +173,37 @@ tensorflow-hub==0.16.1
 
 We also need to provide a configuration file to let BentoML know what we are building. Have a look at the [bentofile.yaml](model/bentofile.yaml).
 
-We're now ready to build our container image using:
+We're now ready to build our model into BentoML specific packaging format, which is called, quite unexpectedly, Bento. To do this, run:
 
 ```bash
-bentoml build --containerize
+cd model
+bentoml build
 ```
 
-BentoML will now build the model into a container image for us. The `--containerize` tells it to prepare an actual Docker image. We can check the output of this by running:
+BentoML will now build the model into a Bento, by default stored in `<user_home_dir>/bentoml/bentos`. You can check it out by running
+
+```bash
+ls ~/bentoml/bentos
+```
+
+You shall find the `cassava_model` directory containing outputs of all successful builds, and a `latest` file pointing to the most recent build.
+
+Having created a Bento package for our model, we are ready to wrap it in a Docker container. Make sure you have Docker installed for this step. To create a Docker container, run
+
+```bash
+bentoml containerize cassava_model:latest
+```
+
+This model tells BentoML to create a Docker container for the most recent version of the `cassava_model` Bento. Those familiar with Docker will notice that we did not have to create a Dockerfile - this is taken care of automatically. We can verify that the Docker image was created by running:
 
 ```bash
 docker images
+```
+
+Worth noting that these last two steps, creating a Bento and creating a Docker image from it, can be joined into a single command:
+
+```bash
+bento build --containerize
 ```
 
 If you have an access to a container registry, e.g. an account at Docker Hub, you can consider pushing this image there
