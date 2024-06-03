@@ -212,7 +212,7 @@ If you have an access to a container registry, e.g. an account at Docker Hub, yo
 docker push [YOUR_CONTAINER_REGISTRY]/[IMAGE_NAME]
 ```
 
-Our setup now looks like this. Where our model has been packaged and sent to a container registry:
+Our setup now looks like this.
 ![step_3](img/step_3.png)
 
 ## Deploying your model
